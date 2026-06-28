@@ -22,6 +22,7 @@ from app.routers import (
     reasoning,
     records,
     safety,
+    validation,
 )
 
 API_PREFIX = "/api/v1"
@@ -36,8 +37,12 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Aether Clinician API",
-        version="0.1.0",
-        description="Clinician-facing diagnostic & management decision-support system (Phase 1).",
+        version="0.4.0",
+        description=(
+            "Clinician-facing diagnostic & management decision-support: patient graph + "
+            "deterministic drug safety (P1), 8-agent reasoning engine + Reasoning Theatre (P2), "
+            "guideline RAG with cited management (P3), validation/regulatory/pilot (P4)."
+        ),
         lifespan=lifespan,
     )
 
@@ -59,7 +64,17 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(health.router)
-    for module in (auth, patients, documents, records, safety, audit, reasoning, guidelines):
+    for module in (
+        auth,
+        patients,
+        documents,
+        records,
+        safety,
+        audit,
+        reasoning,
+        guidelines,
+        validation,
+    ):
         app.include_router(module.router, prefix=API_PREFIX)
 
     return app

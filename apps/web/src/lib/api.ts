@@ -12,10 +12,13 @@ import type {
   Paginated,
   Patient,
   PatientSummary,
+  PerformanceMetrics,
   ReasoningResult,
   ReasoningSession,
   SafetyCheckResponse,
+  SafetyReport,
   TokenResponse,
+  ValidationRun,
 } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -227,4 +230,25 @@ export const api = {
     }>(`/guidelines/corpus`),
   managementOptions: (sessionId: string) =>
     request<ClinicalSuggestion[]>(`/reasoning/${sessionId}/management-options`),
+
+  // --- Validation / regulatory / safety (Phase 4) ---
+  performanceMetrics: () =>
+    request<PerformanceMetrics>(`/metrics/performance`),
+  runValidation: () => request<ValidationRun>(`/validation/run`, { method: 'POST' }),
+  listValidationRuns: () =>
+    request<Array<{ id: string; vignette_count: number; metrics: Record<string, unknown>; created_at: string }>>(
+      `/validation/runs`,
+    ),
+  fileSafetyReport: (body: {
+    category: string;
+    severity: string;
+    description: string;
+    patient_id?: string;
+    session_id?: string;
+  }) =>
+    request<SafetyReport>(`/safety-reports`, { method: 'POST', body: JSON.stringify(body) }),
+  listSafetyReports: () => request<SafetyReport[]>(`/safety-reports`),
+  pilotStatus: () => request<{ pilot_mode: boolean; message: string }>(`/pilot/status`),
+  samdDossierUrl: (format: 'json' | 'markdown' = 'markdown') =>
+    `${PREFIX}/regulatory/samd-dossier?format=${format}`,
 };

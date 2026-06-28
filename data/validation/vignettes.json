@@ -1,0 +1,64 @@
+[
+  {
+    "id": "VIG-ACS-01",
+    "title": "Exertional central chest pain",
+    "presenting_complaint": "54-year-old with central chest pain radiating to the left arm with sweating and breathlessness for one hour",
+    "setup": { "conditions": ["Type 2 diabetes mellitus"], "medications": [], "allergies": [] },
+    "expected_diagnoses": ["angina", "coronary"],
+    "expected_cant_miss": ["coronary", "pulmonary embolism"],
+    "expects_hard_block": false,
+    "expected_min_tier": "flag_for_review"
+  },
+  {
+    "id": "VIG-CAP-01",
+    "title": "Febrile productive cough",
+    "presenting_complaint": "fever with productive cough and sputum for three days",
+    "setup": { "conditions": [], "medications": [], "allergies": [] },
+    "expected_diagnoses": ["pneumonia"],
+    "expected_cant_miss": [],
+    "expects_hard_block": false,
+    "expects_cited_management": true
+  },
+  {
+    "id": "VIG-T2DM-01",
+    "title": "New hyperglycaemia symptoms",
+    "presenting_complaint": "polyuria, polydipsia and weight loss over two months",
+    "setup": { "conditions": [], "medications": [], "allergies": [] },
+    "expected_diagnoses": ["diabetes"],
+    "expected_cant_miss": [],
+    "expects_hard_block": false,
+    "expects_cited_management": true
+  },
+  {
+    "id": "VIG-HTN-01",
+    "title": "Headache with raised blood pressure",
+    "presenting_complaint": "headache and high blood pressure with dizziness",
+    "setup": { "conditions": [], "medications": [], "allergies": [] },
+    "expected_diagnoses": ["hypertension"],
+    "expected_cant_miss": [],
+    "expects_hard_block": false,
+    "expects_cited_management": true
+  },
+  {
+    "id": "VIG-MAL-01",
+    "title": "Febrile illness after travel",
+    "presenting_complaint": "fever with rigors and chills after travel to an endemic area",
+    "setup": { "conditions": [], "medications": [], "allergies": [] },
+    "expected_diagnoses": ["febrile"],
+    "expected_cant_miss": ["malaria"],
+    "expects_hard_block": false
+  },
+  {
+    "id": "VIG-HARDBLOCK-01",
+    "title": "Aspirin allergy with current aspirin",
+    "presenting_complaint": "chest discomfort, currently on aspirin",
+    "setup": {
+      "conditions": [],
+      "medications": ["Aspirin"],
+      "allergies": ["Aspirin"]
+    },
+    "expected_diagnoses": [],
+    "expected_cant_miss": [],
+    "expects_hard_block": true
+  }
+]

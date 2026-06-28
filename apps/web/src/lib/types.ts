@@ -200,3 +200,42 @@ export interface ReasoningEvent {
   event: string;
   data: Record<string, unknown>;
 }
+
+// --- Phase 4: validation / regulatory / safety ---
+
+export interface PerformanceMetrics {
+  pilot_mode: boolean;
+  total_sessions: number;
+  completed_sessions: number;
+  awaiting_review: number;
+  autonomy_tier_distribution: Record<string, number>;
+  hard_blocks_total: number;
+  cant_miss_total: number;
+  verifier_disagreement_rate: number;
+  degraded_rate: number;
+  mean_citation_faithfulness: number | null;
+  citation_faithfulness_target: number;
+  open_safety_reports: number;
+}
+
+export interface ValidationRun {
+  id: string;
+  vignette_count: number;
+  corpus_version: string | null;
+  metrics: Record<string, number | Record<string, number> | null>;
+  results: Array<Record<string, unknown>>;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface SafetyReport {
+  id: string;
+  category: string;
+  severity: string;
+  status: string;
+  description: string;
+  patient_id: string | null;
+  session_id: string | null;
+  detail: Record<string, unknown>;
+  created_at: string;
+}
