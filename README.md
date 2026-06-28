@@ -8,9 +8,10 @@ action. The clinician is always the decision-maker — the system supports, neve
 
 > **Demo build — decision-support only, not for real patient care.**
 
-This repository currently implements **Phase 1 (Foundation)**. The multi-agent diagnostic
-reasoning engine (Phase 2), guideline RAG (Phase 3), and validation/regulatory work (Phase 4)
-are scoped in [`docs/implementation-plan.md`](docs/implementation-plan.md).
+This repository implements **all four phases**: Phase 1 foundation (records, drug safety,
+audit), Phase 2 multi-agent reasoning engine + Reasoning Theatre, Phase 3 guideline RAG with
+cited management, and Phase 4 clinical validation / regulatory / pilot. See
+[`docs/implementation-plan.md`](docs/implementation-plan.md) for the original scope.
 
 ---
 
@@ -27,6 +28,25 @@ are scoped in [`docs/implementation-plan.md`](docs/implementation-plan.md).
 | **Immutable audit log** — SHA-256 hash chain | `…/audit_service.py`, `app/core/audit_hash.py` | Append-only; tamper-evident; per-patient + global chain verification |
 | **Schema + migrations** | `data/migrations/` | Alembic; `updated_at` + audit-immutability triggers on PostgreSQL |
 | **Frontend** | `apps/web/` | Next.js 14: auth, patient list/detail, upload + extraction review, drug-safety, audit |
+
+## What's implemented (Phases 2–4)
+
+| Feature | Where | Notes |
+|---|---|---|
+| **8-agent reasoning engine** | `apps/api/app/agents/` | Triage, parallel specialist hypothesis panel, can't-miss sentinel, devil's-advocate, investigation strategist, guideline-RAG, **verifier gatekeeper**, synthesis — a LangGraph-style `StateGraph` with a deterministic offline fallback |
+| **Reasoning Theatre** | `apps/web/.../reasoning/`, SSE | Live agent lanes, hypotheses, pulsing can't-miss flags, non-collapsible dissent, verifier verdict streamed over Server-Sent Events |
+| **Anti-automation-bias UX** | `SuggestionCard.tsx` | Evidence rendered **before** conclusions, mandatory devil's-advocate, active-engagement gates on flag-for-review, qualitative probability bands (never %) |
+| **Immutable clinical suggestions** | `clinical_suggestion.py` | Append-only; Postgres UPDATE/DELETE trigger; clinician decisions captured separately; hard-block override needs documented reasoning |
+| **Guideline RAG + cited management** | `guideline_service.py`, `app/agents/guideline_rag.py` | ICMR STW + WHO/NICE corpus, section-aware ingestion (Qdrant optional, lexical fallback), 0.75 grounding threshold, **citation-faithfulness** scoring (target ≥95%) |
+| **Clinical validation harness** | `validation_service.py`, `data/validation/` | Gold vignettes through the full pipeline → top-1/top-3 accuracy, can't-miss recall, hard-block correctness, tier distribution; immutable `ValidationRun` records |
+| **CDSCO SaMD dossier** | `regulatory_service.py` | Auto-generated (JSON + Markdown) from live metadata: risk controls, recomputed audit-chain integrity, latest validation metrics, DPDP governance |
+| **Metrics dashboard + safety reporting + pilot** | `apps/web/.../metrics/`, `metrics_service.py` | Performance metrics, validation runner, append-only safety-report register, monitored-pilot status |
+
+### Reasoning safety properties (enforced & tested)
+- **The Verifier cannot be bypassed** — it sits on every path to synthesis.
+- **Conservative output wins** on disagreement (band downgrade + tier escalation).
+- **Can't-miss diagnoses are append-only** and force flag-for-review.
+- **Offline → explicit degraded mode**, never silent confident output.
 
 ### Safety architecture highlights
 - **Hard blocks cannot be overridden.** Allergy conflicts (including same-drug-class cross
