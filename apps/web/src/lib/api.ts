@@ -1,0 +1,178 @@
+// Typed API client with bearer-token auth and transparent refresh.
+
+import type {
+  Account,
+  AuditEntry,
+  DocumentResponse,
+  ExtractionResult,
+  LongitudinalRecord,
+  Paginated,
+  Patient,
+  PatientSummary,
+  SafetyCheckResponse,
+  TokenResponse,
+} from './types';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
+const PREFIX = `${API_URL}/api/v1`;
+
+const ACCESS_KEY = 'aether_access';
+const REFRESH_KEY = 'aether_refresh';
+
+export const tokenStore = {
+  get access() {
+    return typeof window === 'undefined' ? null : localStorage.getItem(ACCESS_KEY);
+  },
+  get refresh() {
+    return typeof window === 'undefined' ? null : localStorage.getItem(REFRESH_KEY);
+  },
+  set(tokens: TokenResponse) {
+    localStorage.setItem(ACCESS_KEY, tokens.access_token);
+    localStorage.setItem(REFRESH_KEY, tokens.refresh_token);
+  },
+  clear() {
+    localStorage.removeItem(ACCESS_KEY);
+    localStorage.removeItem(REFRESH_KEY);
+  },
+};
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public code: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+  retry = true,
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  if (!(options.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const access = tokenStore.access;
+  if (access) headers.set('Authorization', `Bearer ${access}`);
+
+  const resp = await fetch(`${PREFIX}${path}`, { ...options, headers });
+
+  if (resp.status === 401 && retry && tokenStore.refresh) {
+    const refreshed = await tryRefresh();
+    if (refreshed) return request<T>(path, options, false);
+  }
+
+  if (!resp.ok) {
+    let code = 'error';
+    let message = resp.statusText;
+    try {
+      const body = await resp.json();
+      code = body.code ?? code;
+      message = body.message ?? body.detail ?? message;
+    } catch {
+      /* non-JSON error */
+    }
+    throw new ApiError(resp.status, code, message);
+  }
+  if (resp.status === 204) return undefined as T;
+  return resp.json() as Promise<T>;
+}
+
+async function tryRefresh(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${PREFIX}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: tokenStore.refresh }),
+    });
+    if (!resp.ok) {
+      tokenStore.clear();
+      return false;
+    }
+    tokenStore.set(await resp.json());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const api = {
+  async signup(email: string, password: string, displayName?: string) {
+    const tokens = await request<TokenResponse>('/auth/signup', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, display_name: displayName }),
+    });
+    tokenStore.set(tokens);
+    return tokens;
+  },
+  async login(email: string, password: string) {
+    const tokens = await request<TokenResponse>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    });
+    tokenStore.set(tokens);
+    return tokens;
+  },
+  async logout() {
+    const refresh = tokenStore.refresh;
+    if (refresh) {
+      try {
+        await request('/auth/logout', {
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: refresh }),
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+    tokenStore.clear();
+  },
+  me: () => request<Account>('/auth/me'),
+
+  listPatients: (search?: string) =>
+    request<Paginated<PatientSummary>>(
+      `/patients${search ? `?search=${encodeURIComponent(search)}` : ''}`,
+    ),
+  getPatient: (id: string) => request<Patient>(`/patients/${id}`),
+  createPatient: (data: Record<string, unknown>) =>
+    request<Patient>('/patients', { method: 'POST', body: JSON.stringify(data) }),
+
+  getRecord: (id: string) => request<LongitudinalRecord>(`/patients/${id}/record`),
+
+  listDocuments: (id: string) =>
+    request<DocumentResponse[]>(`/patients/${id}/documents`),
+  uploadDocument: (id: string, file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return request<DocumentResponse>(`/patients/${id}/documents`, {
+      method: 'POST',
+      body: form,
+    });
+  },
+  getExtraction: (id: string, docId: string) =>
+    request<ExtractionResult>(`/patients/${id}/documents/${docId}/extraction`),
+  approveExtraction: (id: string, docId: string, rejected: number[] = []) =>
+    request<{ merged: Record<string, number> }>(
+      `/patients/${id}/documents/${docId}/approve`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ corrections: [], rejected_entity_indexes: rejected }),
+      },
+    ),
+
+  checkDrugSafety: (id: string, body: { drug_reference_id?: string; drug_name?: string }) =>
+    request<SafetyCheckResponse>(`/patients/${id}/drug-safety/check`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  auditTrail: (id: string) =>
+    request<Paginated<AuditEntry>>(`/patients/${id}/audit`),
+  verifyAudit: (id: string) =>
+    request<{ entries_checked: number; chain_valid: boolean }>(
+      `/patients/${id}/audit/verify`,
+    ),
+};

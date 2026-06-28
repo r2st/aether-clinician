@@ -1,0 +1,46 @@
+"""File storage abstraction. Local filesystem for dev; S3/MinIO-ready interface.
+
+Files are stored under a content-addressed path (sha256 prefix) so identical bytes share
+a path and deduplication is trivial. Storage paths are never public URLs.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from pathlib import Path
+
+from app.config import settings
+
+
+def compute_sha256(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+class LocalStorage:
+    def __init__(self, base_dir: str | None = None) -> None:
+        self.base = Path(base_dir or settings.local_storage_dir)
+        self.base.mkdir(parents=True, exist_ok=True)
+
+    def _path_for(self, patient_id: str, sha256: str, file_name: str) -> Path:
+        # storage/<patient>/<aa>/<sha256>__<original-name>
+        suffix = Path(file_name).suffix
+        shard = sha256[:2]
+        return self.base / patient_id / shard / f"{sha256}{suffix}"
+
+    def write(self, patient_id: str, sha256: str, file_name: str, data: bytes) -> str:
+        path = self._path_for(patient_id, sha256, file_name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_bytes(data)
+        return str(path)
+
+    def read(self, storage_path: str) -> bytes:
+        return Path(storage_path).read_bytes()
+
+    def exists(self, storage_path: str) -> bool:
+        return Path(storage_path).exists()
+
+
+def get_storage() -> LocalStorage:
+    # S3 backend is wired the same way for production; local for Phase 1 dev.
+    return LocalStorage()

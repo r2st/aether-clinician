@@ -1,0 +1,8 @@
+# Shared Ruff config for all Python workspaces. Each workspace's pyproject.toml
+# is the authoritative source; this file documents the shared baseline.
+line-length = 100
+target-version = "py312"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "C4"]
+ignore = ["B008"]

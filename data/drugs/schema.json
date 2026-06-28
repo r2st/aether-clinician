@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Aether Clinician drug seed data",
+  "definitions": {
+    "drug_vocabulary_entry": {
+      "type": "object",
+      "required": ["generic_name", "reference_id"],
+      "properties": {
+        "brand_name": {"type": ["string", "null"]},
+        "generic_name": {"type": "string"},
+        "reference_id": {"type": "string"},
+        "atc_code": {"type": ["string", "null"]},
+        "drug_class": {"type": ["string", "null"]},
+        "strength": {"type": ["string", "null"]},
+        "form": {"type": ["string", "null"]}
+      }
+    },
+    "interaction_entry": {
+      "type": "object",
+      "required": ["drug_a_reference_id", "drug_b_reference_id", "severity", "description", "source"],
+      "properties": {
+        "drug_a_reference_id": {"type": "string"},
+        "drug_b_reference_id": {"type": "string"},
+        "severity": {"enum": ["minor", "moderate", "major", "contraindicated"]},
+        "evidence_level": {"enum": ["established", "probable", "suspected", "theoretical", null]}
+      }
+    },
+    "contraindication_entry": {
+      "type": "object",
+      "required": ["drug_reference_id", "condition_name", "severity", "description", "is_absolute", "source"],
+      "properties": {
+        "drug_reference_id": {"type": "string"},
+        "condition_name": {"type": "string"},
+        "severity": {"enum": ["relative", "absolute", "dose_adjustment_required"]},
+        "is_absolute": {"type": "boolean"},
+        "renal_threshold": {"type": ["object", "null"]},
+        "hepatic_threshold": {"type": ["object", "null"]}
+      }
+    }
+  }
+}

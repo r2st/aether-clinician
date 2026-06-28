@@ -1,0 +1,53 @@
+"""AuditLog model — append-only, SHA-256 hash-chained log of all clinical actions (P1-09)."""
+
+from __future__ import annotations
+
+import uuid
+
+from sqlalchemy import BigInteger, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.types import GUID, JSONBType
+from app.models.base import Base, CreatedAtMixin, UUIDPrimaryKeyMixin
+
+# Recognised clinical action types written to the immutable trail.
+AUDIT_ACTIONS = (
+    "patient_created",
+    "patient_updated",
+    "patient_deleted",
+    "document_uploaded",
+    "extraction_completed",
+    "extraction_approved",
+    "field_corrected",
+    "graph_merged",
+    "drug_safety_check",
+    "record_exported",
+)
+
+
+class AuditLog(UUIDPrimaryKeyMixin, CreatedAtMixin, Base):
+    """One immutable audit entry.
+
+    Tamper-evidence: ``record_hash = sha256(prev_hash || canonical_payload)``. Each entry
+    chains to the previous entry's hash, so any retroactive edit breaks the chain. Rows are
+    append-only — the table has no ``updated_at``/``is_deleted`` and the service never updates.
+    """
+
+    __tablename__ = "audit_logs"
+
+    # Monotonic per-table sequence used to order the hash chain deterministically.
+    # Assigned by the audit service (max+1) under a row lock, not DB autoincrement,
+    # because this is not the primary key.
+    sequence: Mapped[int] = mapped_column(BigInteger, nullable=False, unique=True, index=True)
+    account_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("accounts.id"), nullable=True
+    )
+    patient_id: Mapped[uuid.UUID | None] = mapped_column(
+        GUID(), ForeignKey("patients.id"), nullable=True, index=True
+    )
+    action: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    entity_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    entity_id: Mapped[uuid.UUID | None] = mapped_column(GUID(), nullable=True)
+    payload: Mapped[dict] = mapped_column(JSONBType, nullable=False, default=dict)
+    prev_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    record_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

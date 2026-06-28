@@ -1,0 +1,289 @@
+"""Patient graph assembly: merge approved extractions into the longitudinal record (P1-06).
+
+Deduplicates against existing entities, marks merged data clinician-confirmed, and computes
+derived markers (eGFR via CKD-EPI 2021) when the inputs are available.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, date, datetime
+from decimal import Decimal, InvalidOperation
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.clinical import (
+    age_from_dob,
+    ckd_epi_2021_egfr,
+    egfr_reference_abnormal,
+    is_creatinine_marker,
+)
+from app.models.allergy import Allergy
+from app.models.condition import Condition
+from app.models.derived_marker import DerivedMarker
+from app.models.document import Document
+from app.models.lab_result import LabResult
+from app.models.medication_event import MedicationEvent
+from app.models.patient import Patient
+from app.services.drug_resolver import DrugResolver
+
+
+def _to_decimal(value: object) -> Decimal | None:
+    if value is None:
+        return None
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+
+
+class GraphService:
+    def __init__(self, db: AsyncSession) -> None:
+        self.db = db
+        self.resolver = DrugResolver(db)
+
+    async def merge_entities(
+        self,
+        *,
+        patient: Patient,
+        document: Document | None,
+        entities: list[dict],
+    ) -> dict[str, int]:
+        """Merge a list of {entity_type, fields, region} dicts. Returns per-type counts."""
+        counts = {"medications": 0, "lab_results": 0, "conditions": 0, "allergies": 0}
+        source_doc_id = document.id if document else None
+        new_lab_results: list[LabResult] = []
+
+        for entity in entities:
+            etype = entity.get("entity_type")
+            fields = entity.get("fields", {})
+            region = entity.get("region")
+            confidence = entity.get("confidence", {})
+
+            if etype == "medication":
+                if await self._merge_medication(patient, source_doc_id, fields, region, confidence):
+                    counts["medications"] += 1
+            elif etype == "lab_result":
+                lab = await self._merge_lab(patient, source_doc_id, fields, region, confidence)
+                if lab is not None:
+                    counts["lab_results"] += 1
+                    new_lab_results.append(lab)
+            elif etype == "condition":
+                if await self._merge_condition(patient, source_doc_id, fields, region, confidence):
+                    counts["conditions"] += 1
+            elif etype == "allergy":
+                if await self._merge_allergy(patient, source_doc_id, fields, region, confidence):
+                    counts["allergies"] += 1
+
+        await self.db.flush()
+        await self._compute_derived_markers(patient, new_lab_results)
+        await self.db.flush()
+        return counts
+
+    async def _merge_medication(self, patient, source_doc_id, fields, region, confidence) -> bool:
+        brand = fields.get("brand_name_raw") or fields.get("generic_name")
+        resolved = await self.resolver.resolve(brand)
+        generic = resolved.generic_name if resolved else fields.get("generic_name")
+        vocab_id = resolved.vocabulary_id if resolved else None
+
+        # Dedup: same generic + dose + not deleted already current.
+        existing = await self.db.execute(
+            select(MedicationEvent).where(
+                MedicationEvent.patient_id == patient.id,
+                MedicationEvent.is_deleted.is_(False),
+                MedicationEvent.is_current.is_(True),
+            )
+        )
+        for med in existing.scalars().all():
+            if (
+                (med.generic_name or "").lower() == (generic or "").lower()
+                and (med.dose or "") == (fields.get("dose") or "")
+                and generic
+            ):
+                return False  # duplicate of an existing current medication
+
+        med = MedicationEvent(
+            patient_id=patient.id,
+            source_document_id=source_doc_id,
+            drug_vocabulary_id=vocab_id,
+            brand_name_raw=fields.get("brand_name_raw"),
+            generic_name=generic,
+            dose=fields.get("dose"),
+            dose_unit=fields.get("dose_unit"),
+            frequency=fields.get("frequency"),
+            route=fields.get("route"),
+            event_type=fields.get("event_type") or "continue",
+            event_date=_parse_date(fields.get("event_date")),
+            is_current=True,
+            extraction_region=region,
+            extraction_confidence=confidence,
+            clinician_confirmed=True,
+            clinician_confirmed_at=datetime.now(UTC),
+        )
+        self.db.add(med)
+        return True
+
+    async def _merge_lab(
+        self, patient, source_doc_id, fields, region, confidence
+    ) -> LabResult | None:
+        marker = fields.get("marker_name")
+        if not marker:
+            return None
+        value_numeric = _to_decimal(fields.get("value_numeric"))
+        low = _to_decimal(fields.get("reference_range_low"))
+        high = _to_decimal(fields.get("reference_range_high"))
+
+        is_abnormal: bool | None = None
+        direction: str | None = None
+        if value_numeric is not None and (low is not None or high is not None):
+            if high is not None and value_numeric > high:
+                is_abnormal, direction = True, "high"
+            elif low is not None and value_numeric < low:
+                is_abnormal, direction = True, "low"
+            else:
+                is_abnormal = False
+
+        sample_date = _parse_datetime(fields.get("sample_date"))
+        lab = LabResult(
+            patient_id=patient.id,
+            source_document_id=source_doc_id,
+            marker_name=marker,
+            value_numeric=value_numeric,
+            value_text=str(fields.get("value_numeric"))
+            if fields.get("value_numeric") is not None
+            else fields.get("value_text"),
+            unit=fields.get("unit"),
+            reference_range_low=low,
+            reference_range_high=high,
+            is_abnormal=is_abnormal,
+            abnormality_direction=direction,
+            sample_date=sample_date,
+            extraction_region=region,
+            extraction_confidence=confidence,
+            clinician_confirmed=True,
+            clinician_confirmed_at=datetime.now(UTC),
+        )
+        self.db.add(lab)
+        return lab
+
+    async def _merge_condition(self, patient, source_doc_id, fields, region, confidence) -> bool:
+        name = fields.get("condition_name")
+        if not name:
+            return False
+        existing = await self.db.execute(
+            select(Condition).where(
+                Condition.patient_id == patient.id,
+                Condition.is_deleted.is_(False),
+            )
+        )
+        for cond in existing.scalars().all():
+            if cond.condition_name.lower() == name.lower():
+                return False
+        cond = Condition(
+            patient_id=patient.id,
+            source_document_id=source_doc_id,
+            condition_name=name,
+            icd10_code=fields.get("icd10_code"),
+            status=fields.get("status") or "active",
+            severity=fields.get("severity"),
+            extraction_region=region,
+            extraction_confidence=confidence,
+            clinician_confirmed=True,
+            clinician_confirmed_at=datetime.now(UTC),
+        )
+        self.db.add(cond)
+        return True
+
+    async def _merge_allergy(self, patient, source_doc_id, fields, region, confidence) -> bool:
+        name = fields.get("allergen_name")
+        if not name:
+            return False
+        existing = await self.db.execute(
+            select(Allergy).where(
+                Allergy.patient_id == patient.id,
+                Allergy.is_deleted.is_(False),
+            )
+        )
+        for allergy in existing.scalars().all():
+            if allergy.allergen_name.lower() == name.lower():
+                return False
+        allergen_type = fields.get("allergen_type") or "drug"
+        vocab_id = None
+        if allergen_type == "drug":
+            resolved = await self.resolver.resolve(name)
+            vocab_id = resolved.vocabulary_id if resolved else None
+        allergy = Allergy(
+            patient_id=patient.id,
+            source_document_id=source_doc_id,
+            allergen_name=name,
+            allergen_type=allergen_type,
+            reaction_description=fields.get("reaction_description"),
+            severity=fields.get("severity"),
+            status="active",
+            drug_vocabulary_id=vocab_id,
+            extraction_region=region,
+            extraction_confidence=confidence,
+            clinician_confirmed=True,
+            clinician_confirmed_at=datetime.now(UTC),
+        )
+        self.db.add(allergy)
+        return True
+
+    async def _compute_derived_markers(self, patient: Patient, new_labs: list[LabResult]) -> None:
+        if patient.date_of_birth is None or patient.sex not in ("male", "female"):
+            return
+        for lab in new_labs:
+            if not is_creatinine_marker(lab.marker_name) or lab.value_numeric is None:
+                continue
+            try:
+                age = age_from_dob(
+                    patient.date_of_birth, (lab.sample_date or datetime.now(UTC)).date()
+                )
+                result = ckd_epi_2021_egfr(
+                    creatinine_mg_dl=float(lab.value_numeric),
+                    age_years=age,
+                    sex=patient.sex,
+                )
+            except ValueError:
+                continue
+            marker = DerivedMarker(
+                patient_id=patient.id,
+                source_lab_result_id=lab.id,
+                marker_name="eGFR",
+                value_numeric=Decimal(str(result.value)),
+                unit="mL/min/1.73m2",
+                formula_name=result.formula_name,
+                formula_version=result.formula_version,
+                input_values=result.inputs,
+                reference_range_low=Decimal("90"),
+                is_abnormal=egfr_reference_abnormal(result.value),
+                computed_at=datetime.now(UTC),
+            )
+            self.db.add(marker)
+
+
+def _parse_date(value: object) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    try:
+        from dateutil import parser as dtparser
+
+        return dtparser.parse(str(value), dayfirst=True).date()
+    except (ValueError, OverflowError, TypeError):
+        return None
+
+
+def _parse_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        from dateutil import parser as dtparser
+
+        dt = dtparser.parse(str(value), dayfirst=True)
+        return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+    except (ValueError, OverflowError, TypeError):
+        return None

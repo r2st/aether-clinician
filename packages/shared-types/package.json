@@ -1,0 +1,8 @@
+{
+  "name": "@aether/shared-types",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonical TypeScript types mirroring the API Pydantic schemas",
+  "main": "src/index.ts",
+  "types": "src/index.ts"
+}

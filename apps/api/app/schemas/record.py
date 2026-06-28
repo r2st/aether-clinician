@@ -1,0 +1,100 @@
+"""Longitudinal record + patient-graph entity schemas."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime
+from decimal import Decimal
+
+from pydantic import BaseModel, ConfigDict
+
+
+class SourceLink(BaseModel):
+    source_document_id: uuid.UUID | None = None
+    extraction_region: dict | None = None
+    clinician_confirmed: bool = False
+
+
+class MedicationItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    brand_name_raw: str | None
+    generic_name: str | None
+    dose: str | None
+    dose_unit: str | None
+    frequency: str | None
+    route: str | None
+    event_type: str
+    event_date: date | None
+    end_date: date | None
+    is_current: bool
+    drug_vocabulary_id: uuid.UUID | None
+    source_document_id: uuid.UUID | None
+    clinician_confirmed: bool
+
+
+class LabItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    marker_name: str
+    value_numeric: Decimal | None
+    value_text: str | None
+    unit: str | None
+    reference_range_low: Decimal | None
+    reference_range_high: Decimal | None
+    is_abnormal: bool | None
+    abnormality_direction: str | None
+    sample_date: datetime | None
+    source_document_id: uuid.UUID | None
+    clinician_confirmed: bool
+
+
+class ConditionItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    condition_name: str
+    icd10_code: str | None
+    status: str
+    onset_date: date | None
+    severity: str | None
+    source_document_id: uuid.UUID | None
+    clinician_confirmed: bool
+
+
+class AllergyItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    allergen_name: str
+    allergen_type: str
+    reaction_description: str | None
+    severity: str | None
+    status: str
+    drug_vocabulary_id: uuid.UUID | None
+    source_document_id: uuid.UUID | None
+    clinician_confirmed: bool
+
+
+class DerivedMarkerItem(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    marker_name: str
+    value_numeric: Decimal
+    unit: str | None
+    formula_name: str
+    formula_version: str
+    is_abnormal: bool | None
+    computed_at: datetime
+
+
+class LongitudinalRecord(BaseModel):
+    patient_id: uuid.UUID
+    medications: list[MedicationItem]
+    lab_results: list[LabItem]
+    conditions: list[ConditionItem]
+    allergies: list[AllergyItem]
+    derived_markers: list[DerivedMarkerItem]

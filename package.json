@@ -1,0 +1,25 @@
+{
+  "name": "aether-clinician",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aether Clinician — clinician-facing diagnostic & management decision-support system (CDSS)",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "typecheck": "turbo typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.1.0",
+    "prettier": "^3.3.3"
+  },
+  "packageManager": "npm@11.6.2",
+  "engines": {
+    "node": ">=20"
+  }
+}
