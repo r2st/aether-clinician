@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     anthropic_max_tokens: int = 4096
     extraction_prompt_version: str = "v1.0"
 
+    # --- Reasoning engine (Phase 2) ---
+    reasoning_info_gain_threshold: float = 0.35
+    reasoning_question_cap: int = 6
+    reasoning_max_intake_rounds: int = 2
+
+    # --- Guideline RAG (Phase 3) ---
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "guidelines"
+    guideline_corpus_version: str = "icmr-2024.1"
+    guideline_retrieval_threshold: float = 0.75
+    guideline_retrieval_k: int = 6
+
+    # --- Validation / pilot (Phase 4) ---
+    pilot_mode: bool = False
+    citation_faithfulness_target: float = 0.95
+
     # --- Storage ---
     storage_backend: Literal["local", "s3"] = "local"
     local_storage_dir: str = "./storage"

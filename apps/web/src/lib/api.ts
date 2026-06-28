@@ -3,12 +3,16 @@
 import type {
   Account,
   AuditEntry,
+  ClinicalSuggestion,
   DocumentResponse,
   ExtractionResult,
+  IntakeState,
   LongitudinalRecord,
   Paginated,
   Patient,
   PatientSummary,
+  ReasoningResult,
+  ReasoningSession,
   SafetyCheckResponse,
   TokenResponse,
 } from './types';
@@ -175,4 +179,38 @@ export const api = {
     request<{ entries_checked: number; chain_valid: boolean }>(
       `/patients/${id}/audit/verify`,
     ),
+
+  // --- Reasoning engine (Phase 2/3) ---
+  startReasoning: (patientId: string, presentingComplaint: string) =>
+    request<IntakeState>(`/patients/${patientId}/reasoning`, {
+      method: 'POST',
+      body: JSON.stringify({ presenting_complaint: presentingComplaint }),
+    }),
+  getSession: (sessionId: string) =>
+    request<ReasoningSession>(`/reasoning/${sessionId}`),
+  submitIntakeAnswers: (
+    sessionId: string,
+    answers: Array<{ question_id: string; answer_text: string }>,
+  ) =>
+    request<IntakeState>(`/reasoning/${sessionId}/intake/answers`, {
+      method: 'POST',
+      body: JSON.stringify({ answers }),
+    }),
+  runReasoning: (sessionId: string) =>
+    request<ReasoningResult>(`/reasoning/${sessionId}/run`, { method: 'POST' }),
+  listSuggestions: (sessionId: string) =>
+    request<ClinicalSuggestion[]>(`/reasoning/${sessionId}/suggestions`),
+  recordDecision: (
+    sessionId: string,
+    suggestionId: string,
+    decision: string,
+    reason?: string,
+  ) =>
+    request<{ id: string; decision: string }>(
+      `/reasoning/${sessionId}/suggestions/${suggestionId}/decision`,
+      { method: 'POST', body: JSON.stringify({ decision, reason: reason ?? null }) },
+    ),
+  // Server-Sent Events URL for the live Reasoning Theatre (token in query for EventSource).
+  reasoningStreamUrl: (sessionId: string) =>
+    `${PREFIX}/reasoning/${sessionId}/stream?token=${tokenStore.access ?? ''}`,
 };

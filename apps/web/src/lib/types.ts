@@ -109,3 +109,94 @@ export interface AuditEntry {
   prev_hash: string;
   created_at: string;
 }
+
+// --- Phase 2/3: reasoning engine ---
+
+export type AutonomyTier = 'informational' | 'suggestive' | 'flag_for_review';
+export type ProbabilityBand =
+  | 'high'
+  | 'moderate'
+  | 'low'
+  | 'very_low'
+  | 'insufficient_data';
+export type ReasoningStatus =
+  | 'created'
+  | 'intake'
+  | 'intake_complete'
+  | 'reasoning'
+  | 'awaiting_review'
+  | 'completed'
+  | 'failed'
+  | 'offline_paused';
+
+export interface ReasoningSession {
+  id: string;
+  patient_id: string;
+  presenting_complaint: string;
+  status: ReasoningStatus;
+  autonomy_tier: AutonomyTier | null;
+  intake_complete: boolean;
+  info_gain_score: number | null;
+  online: boolean;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
+export interface IntakeQuestion {
+  id: string;
+  question_text: string;
+  question_type: string;
+  rationale: string | null;
+  sequence_order: number;
+  info_gain_score: number | null;
+  answered_at: string | null;
+}
+
+export interface IntakeState {
+  session: ReasoningSession;
+  pending_questions: IntakeQuestion[];
+  intake_complete: boolean;
+}
+
+export interface Citation {
+  section_id: string;
+  source: string;
+  document_title: string;
+  heading: string | null;
+  snippet: string | null;
+  score: number | null;
+  corpus_version?: string | null;
+  page_range?: string | null;
+}
+
+export interface ClinicalSuggestion {
+  id: string;
+  session_id: string;
+  patient_id: string;
+  output_type: 'differential' | 'cant_miss' | 'investigation' | 'management' | 'safety' | 'summary';
+  autonomy_tier: AutonomyTier;
+  confidence_band: ProbabilityBand | null;
+  title: string;
+  body: string | null;
+  evidence: Record<string, unknown>;
+  citations: Citation[];
+  agent_trace: unknown[];
+  verifier_verdict: Record<string, unknown>;
+  devils_advocate: Record<string, unknown>;
+  is_hard_block: boolean;
+  cant_miss_flag: boolean;
+  supersedes_id: string | null;
+  created_at: string;
+}
+
+export interface ReasoningResult {
+  session: ReasoningSession;
+  suggestions: ClinicalSuggestion[];
+  case_state: Record<string, unknown>;
+}
+
+export interface ReasoningEvent {
+  event: string;
+  data: Record<string, unknown>;
+}

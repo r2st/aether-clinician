@@ -22,6 +22,16 @@ AUDIT_ACTIONS = (
     "graph_merged",
     "drug_safety_check",
     "record_exported",
+    "reasoning_session_started",
+    "reasoning_intake_answered",
+    "reasoning_session_completed",
+    "reasoning_session_failed",
+    "clinical_suggestion_created",
+    "clinician_decision_recorded",
+    "hard_block_triggered",
+    "validation_run_executed",
+    "safety_report_filed",
+    "regulatory_dossier_generated",
 )
 
 

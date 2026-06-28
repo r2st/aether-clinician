@@ -12,7 +12,16 @@ from app.config import settings
 from app.db.session import dispose_engine
 from app.exceptions import AetherError
 from app.middleware import RequestContextMiddleware
-from app.routers import audit, auth, documents, health, patients, records, safety
+from app.routers import (
+    audit,
+    auth,
+    documents,
+    health,
+    patients,
+    reasoning,
+    records,
+    safety,
+)
 
 API_PREFIX = "/api/v1"
 
@@ -49,7 +58,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(health.router)
-    for module in (auth, patients, documents, records, safety, audit):
+    for module in (auth, patients, documents, records, safety, audit, reasoning):
         app.include_router(module.router, prefix=API_PREFIX)
 
     return app

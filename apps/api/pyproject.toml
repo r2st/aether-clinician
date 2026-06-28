@@ -19,6 +19,10 @@ known-first-party = ["app", "tests"]
 [tool.ruff.lint.per-file-ignores]
 # The extraction system prompt contains an inline JSON schema example exceeding 100 cols.
 "app/services/extraction/claude_client.py" = ["E501"]
+# Agent system prompts embed inline JSON output schemas exceeding 100 cols.
+"app/agents/prompts.py" = ["E501"]
+# Deterministic fallback diagnosis table — aligned single-line tuples read better.
+"app/agents/hypothesis_panel.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.12"

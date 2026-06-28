@@ -41,7 +41,10 @@ export default function PatientDetailPage({ params }: { params: { id: string } }
             <Button variant="secondary">Upload document</Button>
           </Link>
           <Link href={`/patients/${id}/safety`}>
-            <Button>Drug safety</Button>
+            <Button variant="secondary">Drug safety</Button>
+          </Link>
+          <Link href={`/patients/${id}/encounter`}>
+            <Button>Start reasoning</Button>
           </Link>
         </div>
       </div>

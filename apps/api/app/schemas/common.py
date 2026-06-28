@@ -40,6 +40,76 @@ class SafetySeverity(str, Enum):
     hard_block = "hard_block"
 
 
+class ReasoningStatus(str, Enum):
+    """Lifecycle of a reasoning session."""
+
+    created = "created"
+    intake = "intake"
+    intake_complete = "intake_complete"
+    reasoning = "reasoning"
+    awaiting_review = "awaiting_review"
+    completed = "completed"
+    failed = "failed"
+    offline_paused = "offline_paused"
+
+
+class ClinicalOutputType(str, Enum):
+    """Kinds of immutable ClinicalSuggestion records."""
+
+    differential = "differential"
+    cant_miss = "cant_miss"
+    investigation = "investigation"
+    management = "management"
+    safety = "safety"
+    summary = "summary"
+
+
+class IntakeQuestionType(str, Enum):
+    red_flag = "red_flag"
+    relevant_negative = "relevant_negative"
+    clarifying = "clarifying"
+    history = "history"
+    exam = "exam"
+
+
+class SpecialistRole(str, Enum):
+    internal_medicine = "internal_medicine"
+    cardiology = "cardiology"
+    infectious_disease = "infectious_disease"
+    primary_care = "primary_care"
+    sentinel = "sentinel"
+
+
+class VerifierStatus(str, Enum):
+    """Outcome of the gatekeeper Verifier agent."""
+
+    agree = "agree"
+    partial_disagreement = "partial_disagreement"
+    major_disagreement = "major_disagreement"
+
+
+class AvailabilityTier(str, Enum):
+    """Indian primary-care facility tier where an investigation is obtainable."""
+
+    phc = "phc"
+    chc = "chc"
+    district_hospital = "district_hospital"
+    referral = "referral"
+
+
+class ClinicianDecision(str, Enum):
+    acknowledged = "acknowledged"
+    accepted = "accepted"
+    dismissed = "dismissed"
+    overridden = "overridden"
+
+
+class GuidelineSource(str, Enum):
+    icmr = "icmr"
+    who = "who"
+    nice = "nice"
+
+
 class PaginationMeta(BaseModel):
     total: int
     limit: int

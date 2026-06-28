@@ -1,0 +1,179 @@
+"""Reasoning-engine routes: sessions, adaptive intake, pipeline run, SSE theatre, decisions."""
+
+from __future__ import annotations
+
+import json
+import uuid
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.security import decode_token
+from app.db.session import get_db
+from app.dependencies import get_current_account
+from app.exceptions import TokenError
+from app.models.user import Account
+from app.schemas.reasoning import (
+    ClinicalSuggestionOut,
+    DecisionOut,
+    DecisionRequest,
+    IntakeQuestionOut,
+    IntakeStateOut,
+    ReasoningResultOut,
+    ReasoningSessionOut,
+    StartReasoningRequest,
+    SubmitAnswersRequest,
+)
+from app.services.reasoning_service import ReasoningService
+
+router = APIRouter(tags=["reasoning"])
+
+
+def _intake_state(session, pending) -> IntakeStateOut:
+    return IntakeStateOut(
+        session=ReasoningSessionOut.model_validate(session),
+        pending_questions=[IntakeQuestionOut.model_validate(q) for q in pending],
+        intake_complete=session.intake_complete,
+    )
+
+
+@router.post("/patients/{patient_id}/reasoning", response_model=IntakeStateOut, status_code=201)
+async def start_reasoning(
+    patient_id: uuid.UUID,
+    body: StartReasoningRequest,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> IntakeStateOut:
+    service = ReasoningService(db)
+    session, questions = await service.start(account.id, patient_id, body.presenting_complaint)
+    return _intake_state(session, questions)
+
+
+@router.get("/reasoning/{session_id}", response_model=ReasoningSessionOut)
+async def get_session(
+    session_id: uuid.UUID,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> ReasoningSessionOut:
+    session = await ReasoningService(db).get_session(account.id, session_id)
+    return ReasoningSessionOut.model_validate(session)
+
+
+@router.get("/reasoning/{session_id}/intake", response_model=list[IntakeQuestionOut])
+async def get_intake(
+    session_id: uuid.UUID,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> list[IntakeQuestionOut]:
+    service = ReasoningService(db)
+    await service.get_session(account.id, session_id)
+    pending = await service.pending_questions(session_id)
+    return [IntakeQuestionOut.model_validate(q) for q in pending]
+
+
+@router.post("/reasoning/{session_id}/intake/answers", response_model=IntakeStateOut)
+async def submit_answers(
+    session_id: uuid.UUID,
+    body: SubmitAnswersRequest,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> IntakeStateOut:
+    service = ReasoningService(db)
+    session, questions = await service.submit_answers(
+        account.id, session_id, [a.model_dump() for a in body.answers]
+    )
+    return _intake_state(session, questions)
+
+
+@router.post("/reasoning/{session_id}/run", response_model=ReasoningResultOut)
+async def run_reasoning(
+    session_id: uuid.UUID,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> ReasoningResultOut:
+    service = ReasoningService(db)
+    session, suggestions = await service.run(account.id, session_id)
+    return ReasoningResultOut(
+        session=ReasoningSessionOut.model_validate(session),
+        suggestions=[ClinicalSuggestionOut.model_validate(s) for s in suggestions],
+        case_state=session.case_state,
+    )
+
+
+async def _account_from_query_or_header(
+    request: Request, db: AsyncSession
+) -> Account:
+    """SSE auth: browsers' EventSource can't set headers, so accept ?token= as a fallback."""
+    auth = request.headers.get("Authorization", "")
+    token = auth.split(" ", 1)[1].strip() if auth.startswith("Bearer ") else None
+    token = token or request.query_params.get("token")
+    if not token:
+        raise TokenError("Missing access token")
+    payload = decode_token(token)
+    if payload.get("type") != "access":
+        raise TokenError("Wrong token type")
+    try:
+        account_id = uuid.UUID(payload["sub"])
+    except (KeyError, ValueError) as exc:
+        raise TokenError("Malformed token subject") from exc
+    account = await db.get(Account, account_id)
+    if account is None or account.is_deleted:
+        raise TokenError("Account not found")
+    return account
+
+
+@router.get("/reasoning/{session_id}/stream")
+async def stream_reasoning(
+    session_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """Run the pipeline and stream Reasoning Theatre events over Server-Sent Events."""
+    account = await _account_from_query_or_header(request, db)
+    service = ReasoningService(db)
+    await service.get_session(account.id, session_id)
+
+    async def event_source():
+        yield ": reasoning theatre stream open\n\n"
+        async for event, data in service.stream(account.id, session_id):
+            yield f"event: {event}\ndata: {json.dumps(data, default=str)}\n\n"
+        yield "event: done\ndata: {}\n\n"
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("/reasoning/{session_id}/suggestions", response_model=list[ClinicalSuggestionOut])
+async def list_suggestions(
+    session_id: uuid.UUID,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> list[ClinicalSuggestionOut]:
+    suggestions = await ReasoningService(db).list_suggestions(account.id, session_id)
+    return [ClinicalSuggestionOut.model_validate(s) for s in suggestions]
+
+
+@router.post(
+    "/reasoning/{session_id}/suggestions/{suggestion_id}/decision",
+    response_model=DecisionOut,
+    status_code=201,
+)
+async def record_decision(
+    session_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    body: DecisionRequest,
+    account: Account = Depends(get_current_account),
+    db: AsyncSession = Depends(get_db),
+) -> DecisionOut:
+    record = await ReasoningService(db).record_decision(
+        account.id, session_id, suggestion_id, body.decision.value, body.reason
+    )
+    return DecisionOut.model_validate(record)
