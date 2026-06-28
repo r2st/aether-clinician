@@ -84,11 +84,19 @@ async def seed_contraindications(db: AsyncSession) -> int:
     return added
 
 
+async def seed_guidelines(db: AsyncSession) -> int:
+    # Local import keeps the optional RAG dependencies out of the core seed path.
+    from app.services.guideline_ingest import ingest
+
+    return await ingest(db)
+
+
 async def seed_all(db: AsyncSession) -> dict[str, int]:
     counts = {
         "drug_vocabulary": await seed_drug_vocabulary(db),
         "drug_interactions": await seed_interactions(db),
         "contraindications": await seed_contraindications(db),
+        "guideline_chunks": await seed_guidelines(db),
     }
     await db.commit()
     return counts

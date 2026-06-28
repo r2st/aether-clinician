@@ -3,6 +3,7 @@
 import type {
   Account,
   AuditEntry,
+  Citation,
   ClinicalSuggestion,
   DocumentResponse,
   ExtractionResult,
@@ -213,4 +214,17 @@ export const api = {
   // Server-Sent Events URL for the live Reasoning Theatre (token in query for EventSource).
   reasoningStreamUrl: (sessionId: string) =>
     `${PREFIX}/reasoning/${sessionId}/stream?token=${tokenStore.access ?? ''}`,
+
+  // --- Guidelines (Phase 3) ---
+  searchGuidelines: (q: string) =>
+    request<Citation[]>(`/guidelines/search?q=${encodeURIComponent(q)}`),
+  corpusInfo: () =>
+    request<{
+      corpus_version: string;
+      chunk_count: number;
+      retrieval_threshold: number;
+      citation_faithfulness_target: number;
+    }>(`/guidelines/corpus`),
+  managementOptions: (sessionId: string) =>
+    request<ClinicalSuggestion[]>(`/reasoning/${sessionId}/management-options`),
 };

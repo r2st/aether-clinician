@@ -16,6 +16,7 @@ from app.routers import (
     audit,
     auth,
     documents,
+    guidelines,
     health,
     patients,
     reasoning,
@@ -58,7 +59,7 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(health.router)
-    for module in (auth, patients, documents, records, safety, audit, reasoning):
+    for module in (auth, patients, documents, records, safety, audit, reasoning, guidelines):
         app.include_router(module.router, prefix=API_PREFIX)
 
     return app

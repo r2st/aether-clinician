@@ -19,6 +19,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           Aether Clinician
         </Link>
         <div className="flex items-center gap-3 text-sm">
+          <Link href="/patients" className="text-slate-600 hover:text-slate-900">
+            Patients
+          </Link>
+          <Link href="/guidelines" className="text-slate-600 hover:text-slate-900">
+            Guidelines
+          </Link>
+          <Link href="/metrics" className="text-slate-600 hover:text-slate-900">
+            Metrics
+          </Link>
           <span className="text-slate-500">{account.display_name ?? account.email}</span>
           <Button variant="secondary" onClick={() => logout()}>
             Sign out

@@ -25,6 +25,13 @@ redis==5.2.1
 anthropic==0.42.0
 pypdf==5.1.0
 
+# --- Reasoning engine + RAG (Phase 2/3) ---
+# Optional at runtime: the orchestrator and retriever degrade to a deterministic, offline
+# path when these are absent (guarded imports). Install for the full production stack.
+langgraph==0.2.60
+qdrant-client==1.12.1
+sentence-transformers==3.3.1
+
 # --- Utilities ---
 httpx==0.28.1
 python-dateutil==2.9.0.post0

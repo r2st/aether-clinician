@@ -43,9 +43,12 @@ def lexical_score(query: str, chunks: list[GuidelineChunk], k: int) -> list[dict
         body = _tokens(f"{chunk.heading or ''} {chunk.content}")
         kw_hits = sum(1 for t in q_tokens if t in kw or any(t in k2 for k2 in kw))
         overlap = len(q_tokens & body)
-        score = min(1.0, (1.5 * kw_hits + overlap) / (len(q_tokens) + 1.0))
+        # Saturating relevance: independent of query length so a long multi-diagnosis query
+        # is not penalised. raw>=4.5 (≈3 keyword hits, or 2 hits + body overlap) clears 0.75.
+        raw = 1.5 * kw_hits + overlap
+        score = round(raw / (raw + 1.5), 4) if raw else 0.0
         if score > 0:
-            scored.append((round(score, 4), chunk))
+            scored.append((score, chunk))
     scored.sort(key=lambda x: x[0], reverse=True)
     return [GuidelineService._to_dict(c, s) for s, c in scored[:k]]
 

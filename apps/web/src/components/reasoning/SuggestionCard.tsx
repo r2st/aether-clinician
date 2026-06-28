@@ -174,13 +174,19 @@ export function SuggestionCard({
           {hasDevil && <DevilsAdvocate critique={s.devils_advocate} />}
 
           {s.citations.length > 0 && (
-            <div className="mt-3 rounded bg-slate-50 p-2">
-              <p className="text-xs font-semibold text-slate-500">Citations</p>
+            <div className="mt-3 space-y-2 rounded bg-slate-50 p-2">
+              <p className="text-xs font-semibold text-slate-500">
+                Guideline citations (grounding)
+              </p>
               {s.citations.map((c, i) => (
-                <p key={i} className="text-xs text-slate-600">
-                  <span className="font-medium uppercase">{c.source}</span> · {c.document_title}{' '}
-                  <span className="text-slate-400">[{c.section_id}]</span>
-                </p>
+                <div key={i} className="border-l-2 border-slate-300 pl-2">
+                  <p className="text-xs font-medium text-slate-700">
+                    <span className="uppercase">{c.source}</span> · {c.document_title}
+                    {c.heading ? ` — ${c.heading}` : ''}{' '}
+                    <span className="text-slate-400">[{c.section_id}]</span>
+                  </p>
+                  {c.snippet && <p className="text-xs italic text-slate-500">“{c.snippet}”</p>}
+                </div>
               ))}
             </div>
           )}
